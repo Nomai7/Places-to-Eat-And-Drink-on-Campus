@@ -18,6 +18,9 @@ struct Venue: Codable {
     let amenities: [String]? // 设施
     let photos: [String]? // 图片
     let URL: URL? // 餐厅官网链接
+    
+    var distance: Double? // 临时存储距离，用于排序
+    
 }
 
 class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, MKMapViewDelegate, CLLocationManagerDelegate {
@@ -62,23 +65,27 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         let latitude = userLocation.coordinate.latitude
         let longitude = userLocation.coordinate.longitude
         let location = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-        
-        // 首次定位时，设置地图区域
+
+        // 首次定位时设置地图区域
         if firstRun {
             firstRun = false
-            let span = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01) // 地图缩放级别
+            let span = MKCoordinateSpan(latitudeDelta: 0.01, longitudeDelta: 0.01)
             let region = MKCoordinateRegion(center: location, span: span)
             myMap.setRegion(region, animated: true)
             
-            // 启用用户位置跟踪（延迟5秒）
+            // 延迟启用位置跟踪
             Timer.scheduledTimer(timeInterval: 5.0, target: self, selector: #selector(startUserTracking), userInfo: nil, repeats: false)
         }
         
-        // 如果启用了用户位置跟踪，持续更新地图中心
+        // 如果启用了用户位置跟踪，保持地图中心为用户位置
         if startTrackingTheUser {
             myMap.setCenter(location, animated: true)
         }
+
+        // **实时更新距离并刷新 UI**
+        updateUI()
     }
+
     
     // 启用用户位置跟踪
     @objc func startUserTracking() {
@@ -128,13 +135,43 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
     
     // 更新 UI：刷新表格和添加地图标注
     func updateUI() {
-        theTable.reloadData() // 刷新表格
-        addAnnotationsToMap() // 添加地图标注
+        // 获取用户当前位置
+        guard let userLocation = locationManager.location else {
+            print("User location is unavailable")
+            return
+        }
+
+        // 计算每个餐厅与用户的距离
+        for i in 0..<venues.count {
+            if let latitude = Double(venues[i].lat), let longitude = Double(venues[i].lon) {
+                let venueLocation = CLLocation(latitude: latitude, longitude: longitude)
+                venues[i].distance = userLocation.distance(from: venueLocation) // 距离以米为单位
+            } else {
+                venues[i].distance = nil // 如果经纬度无效，则距离为 nil
+            }
+        }
+
+        // 按距离从近到远排序
+        venues.sort { (venue1, venue2) -> Bool in
+            guard let distance1 = venue1.distance, let distance2 = venue2.distance else {
+                return false // 如果距离为空，保持原顺序
+            }
+            return distance1 < distance2
+        }
+
+        // 刷新表格视图
+        theTable.reloadData()
+        
+        // 重新更新地图标注
+        addAnnotationsToMap()
     }
+
+
     
     // MARK: - 在地图上添加标注
     func addAnnotationsToMap() {
         myMap.removeAnnotations(myMap.annotations) // 清除旧标注
+        
         for venue in venues {
             guard let latitude = Double(venue.lat), let longitude = Double(venue.lon) else {
                 continue
@@ -146,6 +183,7 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             myMap.addAnnotation(annotation)
         }
     }
+
     
     // MARK: - 表格视图数据源方法
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -156,8 +194,20 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         let cell = tableView.dequeueReusableCell(withIdentifier: "myCell", for: indexPath)
         var content = UIListContentConfiguration.subtitleCell()
         let venue = venues[indexPath.row]
-        content.text = venue.name // 餐厅名称
-        content.secondaryText = venue.building // 餐厅建筑
+
+        // 设置餐厅名称
+        content.text = venue.name
+        
+        // 设置距离和建筑信息
+        if let distance = venue.distance {
+            // 格式化距离为 "m" 或 "km"
+            let formattedDistance = distance >= 1000 ? String(format: "%.2f km", distance / 1000) : String(format: "%.0f m", distance)
+            content.secondaryText = "\(venue.building) - \(formattedDistance)"
+        } else {
+            // 如果没有距离信息，仅显示建筑名称
+            content.secondaryText = venue.building
+        }
+
         cell.contentConfiguration = content
         return cell
     }
