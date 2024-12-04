@@ -108,12 +108,6 @@
                                 <state key="normal" title="Button"/>
                                 <buttonConfiguration key="configuration" style="plain" title="Button"/>
                             </button>
-                            <button opaque="NO" contentMode="scaleToFill" fixedFrame="YES" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="YXB-T6-ZpO">
-                                <rect key="frame" x="321" y="70" width="55" height="35"/>
-                                <autoresizingMask key="autoresizingMask" flexibleMaxX="YES" flexibleMaxY="YES"/>
-                                <state key="normal" title="Button"/>
-                                <buttonConfiguration key="configuration" style="plain" title="Like"/>
-                            </button>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="VlQ-ng-YxU"/>
                         <color key="backgroundColor" systemColor="systemBackgroundColor"/>
