@@ -7,6 +7,12 @@ struct FoodData: Codable {
     var food_venues: [Venue] // 餐饮场所列表
 }
 
+enum VenueStatus: String, Codable {
+    case favorite = "favorite"  // 喜欢
+    case disliked = "disliked" // 不喜欢
+    case normal = "normal"     // 默认
+}
+
 // 餐厅模型
 struct Venue: Codable {
     let name: String // 餐厅名称
@@ -20,7 +26,12 @@ struct Venue: Codable {
     let URL: URL? // 餐厅官网链接
     
     var distance: Double? // 临时存储距离，用于排序
-    
+    var status: VenueStatus = .normal // 默认值为正常状态
+
+    // 排除 `status` 和 `distance`，避免影响 JSON 解码
+    enum CodingKeys: String, CodingKey {
+        case name, building, lat, lon, description, opening_times, amenities, photos, URL
+    }
 }
 
 class ViewController: UIViewController, UITableViewDataSource, UITableViewDelegate, MKMapViewDelegate, CLLocationManagerDelegate {
@@ -48,6 +59,8 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
         
         // 获取餐饮场所数据
         fetchVenueData()
+        
+        loadStatuses() // 加载喜爱状态
     }
     
     // MARK: - 初始化位置管理器
@@ -121,6 +134,9 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
                 let decoder = JSONDecoder()
                 let foodData = try decoder.decode(FoodData.self, from: data)
                 self.venues = foodData.food_venues // 存储解析后的餐饮场所数据
+                
+                // 加载用户保存的喜爱状态
+                self.loadStatuses()
                 
                 // 更新 UI 必须在主线程
                 DispatchQueue.main.async {
@@ -207,6 +223,25 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             // 如果没有距离信息，仅显示建筑名称
             content.secondaryText = venue.building
         }
+        
+        // 创建“喜爱”按钮
+            let favoriteButton = UIButton(type: .system)
+            favoriteButton.tag = indexPath.row // 标记行索引
+            favoriteButton.addTarget(self, action: #selector(toggleFavoriteStatus(_:)), for: .touchUpInside)
+
+            // 根据状态设置按钮图标
+            switch venue.status {
+            case .favorite:
+                favoriteButton.setTitle("❤️", for: .normal)
+            case .disliked:
+                favoriteButton.setTitle("🖤", for: .normal)
+            case .normal:
+                favoriteButton.setTitle("🤍", for: .normal)
+            }
+
+            // 设置按钮布局
+            favoriteButton.frame = CGRect(x: 0, y: 0, width: 30, height: 30)
+            cell.accessoryView = favoriteButton // 将按钮作为单元格的 accessoryView
 
         cell.contentConfiguration = content
         return cell
@@ -233,5 +268,54 @@ class ViewController: UIViewController, UITableViewDataSource, UITableViewDelega
             detailVC.venue = selectedVenue // 传递数据到详情页面
         }
     }
+    
+    @objc func toggleFavoriteStatus(_ sender: UIButton) {
+        let rowIndex = sender.tag // 获取按钮对应的行索引
+        var venue = venues[rowIndex]
+
+        // 切换喜爱状态
+        switch venue.status {
+        case .normal:
+            venue.status = .favorite
+        case .favorite:
+            venue.status = .disliked
+        case .disliked:
+            venue.status = .normal
+        }
+
+        venues[rowIndex] = venue // 更新数据源中的餐厅
+
+        saveStatuses() // 保存喜爱状态
+        theTable.reloadRows(at: [IndexPath(row: rowIndex, section: 0)], with: .automatic) // 刷新表格
+    }
+    
+    func saveStatuses() {
+        // 创建一个字典，存储餐厅名称与喜爱状态的对应关系
+        let statuses = venues.reduce(into: [String: String]()) { result, venue in
+            result[venue.name] = venue.status.rawValue
+        }
+        
+        // 保存到 UserDefaults
+        UserDefaults.standard.set(statuses, forKey: "VenueStatuses")
+        UserDefaults.standard.synchronize() // 确保立即保存
+    }
+
+    
+    func loadStatuses() {
+        // 从 UserDefaults 获取保存的状态
+        if let savedStatuses = UserDefaults.standard.dictionary(forKey: "VenueStatuses") as? [String: String] {
+            for i in 0..<venues.count {
+                // 查找每个餐厅的保存状态并更新
+                if let statusRawValue = savedStatuses[venues[i].name],
+                   let status = VenueStatus(rawValue: statusRawValue) {
+                    venues[i].status = status
+                }
+            }
+        }
+    }
+
+
+
+
 }
 
